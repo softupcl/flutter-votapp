@@ -1,10 +1,14 @@
-// ignore_for_file: prefer_const_constructors, sort_child_properties_last
+// ignore_for_file: prefer_const_constructors, sort_child_properties_last, non_constant_identifier_names
 
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:pie_chart/pie_chart.dart';
+import 'package:provider/provider.dart';
 import 'package:votaapp/models/opciones.dart';
+
+import '../services/socket_service.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -12,16 +16,31 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<Opciones> opciones = [
-    Opciones(id: '1', nombre: 'Radiohead', votos: 50),
-    Opciones(id: '2', nombre: 'Metallica', votos: 10),
-    Opciones(id: '3', nombre: 'Lucybell', votos: 30),
-    Opciones(id: '4', nombre: 'Saiko', votos: 25),
-    Opciones(id: '5', nombre: 'Muse', votos: 18),
-  ];
+  List<Opcion> opciones = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    socketService.socket.on('opciones-activas', _handleOpcionesActivas);
+  }
+
+  _handleOpcionesActivas(dynamic payload) {
+    opciones =
+        (payload as List).map((opcion) => Opcion.fromMap(opcion)).toList();
+    setState(() {});
+  }
+
+/*   @override
+  void dispose() {
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    socketService.socket.off('opciones-activas');
+    super.dispose();
+  } */
 
   @override
   Widget build(BuildContext context) {
+    final socketService = Provider.of<SocketService>(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -30,12 +49,27 @@ class _HomePageState extends State<HomePage> {
         ),
         backgroundColor: Colors.white,
         elevation: 1,
+        actions: [
+          Container(
+            margin: EdgeInsets.only(right: 10),
+            child: (socketService.statusServidor == StatusServidor.online)
+                ? Icon(Icons.check_circle, color: Colors.blue[300])
+                : Icon(Icons.offline_bolt, color: Colors.red),
+          )
+        ],
       ),
-      body: ListView.builder(
-          itemCount: opciones.length,
-          itemBuilder: (context, int index) {
-            return _OpcionTile(opciones[index]);
-          }),
+      body: Column(
+        children: [
+          _mostrarGrafica(),
+          Expanded(
+            child: ListView.builder(
+                itemCount: opciones.length,
+                itemBuilder: (context, int index) {
+                  return _OpcionTile(opciones[index]);
+                }),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         child: Icon(Icons.add),
         elevation: 1,
@@ -44,12 +78,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _OpcionTile(Opciones opcion) {
+  Widget _OpcionTile(Opcion opcion) {
+    final socketService = Provider.of<SocketService>(context, listen: false);
     return Dismissible(
       key: Key(opcion.id),
       direction: DismissDirection.startToEnd,
-      onDismissed: (direction) {
-        print(direction);
+      onDismissed: (_) {
+        socketService.socket.emit('borrar-opcion', {'id': opcion.id});
       },
       background: Container(
         padding: EdgeInsets.only(left: 8),
@@ -70,7 +105,8 @@ class _HomePageState extends State<HomePage> {
         title: Text(opcion.nombre),
         trailing: Text('${opcion.votos}', style: TextStyle(fontSize: 20)),
         onTap: () {
-          print(opcion.nombre);
+          socketService.socket.emit('voto-opcion', {'id': opcion.id});
+          setState(() {});
         },
       ),
     );
@@ -82,7 +118,7 @@ class _HomePageState extends State<HomePage> {
     if (Platform.isAndroid) {
       return showDialog(
         context: context,
-        builder: (context) {
+        builder: (_) {
           return AlertDialog(
             title: Text('Nueva opcion:'),
             content: TextField(
@@ -128,11 +164,22 @@ class _HomePageState extends State<HomePage> {
 
   void agregarOpcionLista(String nombre) {
     if (nombre.length > 1) {
-      this.opciones.add(new Opciones(
-          votos: 0, nombre: nombre, id: DateTime.now().toString()));
-      setState(() {});
+      final socketService = Provider.of<SocketService>(context, listen: false);
+      socketService.socket.emit('agregar-opcion', {'nombre': nombre});
     }
-
+    setState(() {});
     Navigator.pop(context);
+  }
+
+  Widget _mostrarGrafica() {
+    Map<String, double> dataMap = {};
+
+    opciones.forEach((opcion) {
+      dataMap.putIfAbsent(opcion.nombre, () => opcion.votos.toDouble());
+    });
+
+    return PieChart(
+      dataMap: dataMap,
+    );
   }
 }

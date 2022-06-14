@@ -1,17 +1,19 @@
-class Opciones {
+class Opcion {
   String id;
   String nombre;
-  int? votos;
+  int votos;
 
-  Opciones({
+  Opcion({
     required this.id,
     required this.nombre,
-    this.votos,
+    required this.votos,
   });
 
-  factory Opciones.fromMap(Map<String, dynamic> obj) => Opciones(
-        id: obj['id'],
-        nombre: obj['mombre'],
-        votos: obj['votos'],
+  factory Opcion.fromMap(Map<String, dynamic> obj) => Opcion(
+        id: obj.containsKey('id') ? obj['id'] : 'no-id',
+        nombre: obj.containsKey('nombre') ? obj['nombre'] : 'sin-nombre',
+        votos: obj.containsKey('votos') ? obj['votos'] : 0,
       );
+
+  toList() {}
 }
